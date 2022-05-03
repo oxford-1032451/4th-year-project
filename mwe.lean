@@ -61,6 +61,7 @@ def has_right_eigenvector (M : matrix n n ℂ) (x : n → ℂ ) := ∃ e : ℂ ,
 
 def has_right_eigenvalue (M : matrix n n ℂ) (e : ℂ) := ∃ x : n → ℂ , has_right_eigenpair M e x
 
+def eigenspace (M : matrix n n ℂ) := set_of (has_eigenvalue M)
 
 def is_skew_symmetric (M : matrix n n ℂ ) := Mᵀ = -M
 
@@ -115,11 +116,6 @@ begin
   rw complex.of_real_im,
   rw ← h_im,
   rw complex.zero_im,
-end
-
-lemma vector_conj_element (v: n → ℂ) (i : n) : (vector_conj v) i = conj (v i) :=
-begin
-  rw vector_conj,
 end
 
 lemma sum_re {v : n → ℂ} {f : ℂ → ℂ }: finset.univ.sum (λ i, (f (v i)).re) = (finset.univ.sum (λ i, f(v i))).re:=
@@ -1496,6 +1492,137 @@ begin
 
   rw tr,
   rw det_transpose,
+end
+
+lemma eigenvectors_linearly_independent (M : matrix n n ℂ) (u v : n → ℂ) (e r : ℂ)
+(ep_1 : has_eigenpair M e u) (ep_2 : has_eigenpair M r v) (neq : e ≠ r) :
+∀ (a b : ℂ), a ≠ 0 → b ≠ 0 → a • u + b • v ≠ 0 :=
+begin
+  intros a b anz bnz,
+  rw ne,
+  by_contra lcz,
+  rw has_eigenpair at ep_1 ep_2,
+  cases ep_1 with unz mul_1,
+  cases ep_2 with vnz mul_2,
+  have m_mul := congr_arg M.mul_vec lcz,
+  rw mul_vec_zero at m_mul,
+  rw mul_vec_add at m_mul,
+  repeat {rw mul_vec_smul at m_mul},
+  rw [mul_1,mul_2] at m_mul,
+  rw add_eq_zero_iff_eq_neg at lcz,
+  rw smul_comm at m_mul,
+  rw lcz at m_mul,
+  rw smul_neg at m_mul,
+  rw add_comm at m_mul,
+  rw tactic.ring.add_neg_eq_sub at m_mul,
+  rw smul_comm at m_mul,
+  rw ← sub_smul at m_mul,
+  rw smul_eq_zero at m_mul,
+  cases m_mul with reqe dot_zero,
+  rw ne at neq,
+  apply neq,
+  rw sub_eq_zero at reqe,
+  rwa eq_comm,
+  rw smul_eq_zero at dot_zero,
+  cases dot_zero with bz vz,
+  rw ne at bnz, apply bnz, exact bz,
+  rw ne at vnz, apply vnz, exact vz,
+end   
+
+theorem independent_eigenvectors_linear_combination_not_eigenvector (M : matrix n n ℂ) (u v : n → ℂ) (e r : ℂ) (neq : e ≠ r)
+(ep_1 : has_eigenpair M e u) (ep_2 : has_eigenpair M r v) : ∀ (a b : ℂ), a ≠ 0 → b ≠ 0 → ¬(has_eigenvector M (a•u+b•v)) :=
+begin
+  have epeu := ep_1,
+  have eprv := ep_2,
+  intros a b anz bnz,
+  rw ne at anz bnz neq,
+  by_contra ev,
+  rw has_eigenvector at ev,
+  cases ev with t ep,
+  rw has_eigenpair at ep,
+  cases ep with lc mul,
+  rw mul_vec_add at mul,
+  rw smul_add at mul,
+  repeat {rw mul_vec_smul at mul},
+
+  rw has_eigenpair at ep_1 ep_2,
+  cases ep_1 with unz mul_1,
+  cases ep_2 with vnz mul_2,
+  rw ne at unz vnz,
+  
+  rw [mul_1,mul_2] at mul,
+
+  have helper_lemma : a • (e - t) • u + b • (r - t) • v = 0,
+  repeat {rw sub_smul},
+  repeat {rw smul_sub},
+  rw sub_add_sub_comm,
+  rw sub_eq_zero,
+  nth_rewrite 2 smul_comm,
+  nth_rewrite 3 smul_comm,
+  exact mul,
+
+  have lin_ind := eigenvectors_linearly_independent M u v e r epeu eprv neq,
+  specialize lin_ind (a • (e - t)) (b • (r - t)),
+
+  have ent : ¬(e - t)=0 :=
+  begin
+    by_contra eeqt,
+    rw eeqt at helper_lemma,
+    rw [zero_smul, smul_zero, zero_add] at helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma, 
+    apply bnz,
+    exact helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma,
+    rw sub_eq_zero at eeqt helper_lemma,
+    apply neq,
+    rw [helper_lemma,eeqt],
+    apply vnz,
+    exact helper_lemma,
+  end,
+
+  have rnt : ¬(r - t)=0 :=
+  begin
+    by_contra reqt,
+    rw reqt at helper_lemma,
+    rw [zero_smul, smul_zero, add_zero] at helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma,
+    apply anz,
+    exact helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma,
+    apply ent,
+    exact helper_lemma,
+    apply unz,
+    exact helper_lemma,
+  end,
+
+  have aemtnz : a • (e - t) ≠ 0,
+  rw smul_ne_zero,
+  split,
+  rwa ne,
+  rwa ne,
+
+  have brmtnz : b • (r - t) ≠ 0,
+  rw smul_ne_zero,
+  split,
+  rwa ne,
+  rwa ne,
+
+  have lin_ind_2 := lin_ind aemtnz brmtnz,
+  repeat {rw smul_assoc at lin_ind_2},
+  rw ne at lin_ind_2,
+  apply lin_ind_2,
+  exact helper_lemma,
+  recover,
+  refine punit.smul_comm_class,
+  exact n,
+  exact n,
+  refine punit.smul_comm_class,
+  exact n,
+  exact n,
 end
 
 end definite
