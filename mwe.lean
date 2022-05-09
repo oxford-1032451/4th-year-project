@@ -1919,10 +1919,9 @@ begin
   rw eigenvector_mul_eq_zero at mul,
   
   have vec_zero := eq_zero_of_mul_vec_eq_zero dnz mul,
-  {
-    apply vnz,
-    exact vec_zero
-  },
+    
+  apply vnz,
+  exact vec_zero,
 
   intro n_ev,
   rw has_eigenvalue at n_ev,
