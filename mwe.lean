@@ -23,7 +23,7 @@ set_option trace.linarith true
 
 universe u
 
-variables {α n m R : Type*} [fintype n] [fintype m] [decidable_eq n]
+variables {α n m R : Type*} [fintype n] [fintype m] [decidable_eq n] [has_neg α]
 
 namespace matrix
 
@@ -59,7 +59,7 @@ def has_left_eigenvector (M : matrix n n ℂ) (v : n → ℂ ) := ∃ e : ℂ , 
 def has_left_eigenvalue (M : matrix n n ℂ) (e : ℂ) := ∃ v : n → ℂ , has_left_eigenpair M e v
 
 -- A matrix is caleed skew-symmetric if its transpose is equal to its negative
-def is_skew_symmetric (M : matrix n n ℂ ) := Mᵀ = -M
+def is_skew_symmetric (M : matrix n n α ) := Mᵀ = -M
 
 -- ∑ Re(f (v i)) = Re(∑ f (v i)) 
 lemma sum_re {v : n → ℂ} {f : ℂ → ℂ }: finset.univ.sum (λ i, (f (v i)).re) = (finset.univ.sum (λ i, f(v i))).re:=
@@ -401,7 +401,7 @@ begin
 end
 
 -- (v')ᵀv = 0 ↔ v = 0
-lemma vector_zero_iff_sq_mag_zero (v : n → ℂ) : vector_sq_mag v = 0 ↔ v=0 := 
+theorem vector_zero_iff_sq_mag_zero (v : n → ℂ) : vector_sq_mag v = 0 ↔ v=0 := 
 begin
   rw vector_sq_mag,
   split,
@@ -683,7 +683,7 @@ begin
   rw neg_inj,
 end
 
--- A Hermitian matrix multiplied by a real number is Hermitian
+-- A Hermitian matrix multiplied by a non-zero real number is Hermitian
 theorem herm_real_smul_herm (M : matrix n n ℂ) (a : ℂ) : a=a.re → (a=0 ∨ is_hermitian M ↔ is_hermitian (a • M)):=
 begin
   intro a_re,
@@ -838,9 +838,53 @@ begin
   exact _inst_3,
 end
 
--- Every Hermitian matrix can be written as A + iB, where A is a symmetric real matrix and B is a skew-symmetric Hermitian matrix
-theorem matrix_decomposition_symm_skew_symm (M : matrix n n ℂ) (herm : is_hermitian M) : ∃ A : matrix n n ℝ , ∃ B : matrix n n ℂ, is_symm A ∧ is_skew_symmetric B ∧ M = A + complex.I • B:=
+-- Every Hermitian matrix can be written as A + iB, where A is a symmetric real matrix and B is a skew-symmetric real matrix
+theorem matrix_decomposition_symm_skew_symm (M : matrix n n ℂ) (herm : is_hermitian M) : ∃ A : matrix n n ℝ , ∃ B : matrix n n ℝ, is_symm A ∧ is_skew_symmetric B ∧ M = A + complex.I • B:=
 begin
+
+  have mul_2_scal: ∀ (x y : ℂ) , x = y ↔ (2 : ℂ)*x = (2 : ℂ)*y,
+  {
+    intros x y,
+    split,
+    intro xey,
+    rw xey,
+
+    intro xey_2,
+
+    rw mul_eq_mul_left_iff at xey_2,
+    cases xey_2 with xey f,
+    exact xey,
+    exfalso,
+    rw ← one_add_one_eq_two at f,
+    rw add_self_eq_zero at f,
+    
+    have onz := one_ne_zero,
+
+    rw ne at onz,
+    apply onz,
+    exact f,
+    exact infinite.nontrivial ℂ,
+  },  
+
+  have mul_2 : ∀ (X Y : matrix n n ℂ) , X = Y ↔ (2 : ℂ) • X = (2 : ℂ) • Y,
+  {
+    intros X Y,
+    split,
+    intro xey,
+    rw xey,
+    intro xey_2,
+    funext,
+    repeat{rw two_smul at xey_2},
+    
+    have mul_2_scalar : (X + X) x x_1 = (Y+Y) x x_1,
+    {rw xey_2},
+
+    simp only [dmatrix.add_apply] at mul_2_scalar,
+    repeat {rw ← two_mul at mul_2_scalar},
+    rw mul_eq_mul_left_iff at mul_2_scalar,
+    simp only [bit0_eq_zero, one_ne_zero, or_false] at mul_2_scalar,
+    exact mul_2_scalar,
+  },
 
   have complex_two_nez : (2:ℂ) ≠ (0:ℂ),
   {
@@ -851,25 +895,81 @@ begin
     exact one_ne_zero,
   },
 
-  have h_1 : (matrix_conj M + M) = matrix_conj (matrix_conj M + M),
-  {  
+  have two_inv_real : (2:ℂ)⁻¹.re = (2:ℝ)⁻¹,
+  {
+    simp only [complex.inv_re, complex.bit0_re, complex.one_re],
+    rw eq_comm,
+    apply eq_div_of_mul_eq,
+    simp only [ne.def, monoid_with_zero_hom.map_eq_zero, bit0_eq_zero, one_ne_zero, not_false_iff],
+    rw complex.norm_sq,
+    dsimp,
+    simp only [complex.bit0_im, complex.one_im, bit0_zero, mul_zero, add_zero, inv_mul_cancel_left₀, ne.def, bit0_eq_zero,
+    one_ne_zero, not_false_iff],
+  },
+
+  have two_inv_im : (2:ℂ)⁻¹.im = (0:ℝ),
+  {
+    rw complex.inv_im,
+    simp only [complex.bit0_im, complex.one_im, bit0_zero, neg_zero', zero_div],
+  },
+
+  have h_1 : ((1:ℂ)/2) • (matrix_conj M + M) = matrix_conj (((1:ℂ)/2) • (matrix_conj M + M)),
+  { 
+    rw mat_smul_conj, 
     rw mat_add_conj,
     rw matrix_conj_conj,
-    rw add_comm
+    rw add_comm,
+    
+    suffices c12 : (1:ℂ)/2 = conj ((1:ℂ)/2),
+    {rw ← c12},
+
+    rw one_div,
+    rw eq_comm,
+    rw complex.eq_conj_iff_im,
+    exact two_inv_im,
+  },
+
+  have conj_i : conj(complex.I/2) = -complex.I/2,
+  {
+    ext,
+    rw complex.conj_re,
+    rw neg_div,
+    rw complex.neg_re,
+    rw eq_neg_iff_add_eq_zero,
+    rw add_self_eq_zero,
+    rw complex.div_re,
+    rw complex.I_re,
+    simp only [zero_mul, zero_div, complex.bit0_im, complex.one_im, bit0_zero, mul_zero, add_zero],
+    rw complex.conj_im,
+    rw neg_div,
+    rw complex.neg_im,
+  },
+
+  have g_1 : (complex.I/(2:ℂ)) • (matrix_conj M - M) = matrix_conj ((complex.I/(2:ℂ)) • (matrix_conj M - M)),
+  {
+    rw mat_smul_conj,
+    rw mat_sub_conj,
+    rw matrix_conj_conj,
+    simp_rw smul_sub,
+    rw conj_i,
+    repeat {rw neg_div},
+    repeat {rw neg_smul},
+    rw neg_sub_neg,
   },
 
   rw ← matrix_eq_conj_iff_real at h_1,
   cases h_1 with N hN,
+  rw ← matrix_eq_conj_iff_real at g_1,
+  cases g_1 with O hO, 
   
-  existsi ((1:ℝ)/2)•N,
-  existsi (complex.I/(2:ℂ)) • (matrix_conj M - M),
-  
+  existsi N,
+  existsi O,
+  rw is_hermitian at herm, 
+
   split,
   
-  rw is_symm,
-  rw transpose_smul,
-  rw is_hermitian at herm,
-  
+  rw is_symm, 
+
   have h_2 : Nᵀ = N,
   {
     ext,
@@ -901,122 +1001,70 @@ begin
     rw add_comm,
   },
 
+  have mul_3 := mul_2,
+
+  specialize mul_2 M,
+  specialize mul_2 (↑(((1:ℝ) / 2) • N) + -(((1:ℂ) / 2) • M.matrix_conj) + ((1:ℂ) / 2) • M),
+
+  have n_smul : (N:(matrix n n ℂ)) = (2:ℂ) • ( ((1:ℂ)/2) • (N:(matrix n n ℂ))),
+  {simp only [one_div, smul_inv_smul₀, ne.def, bit0_eq_zero, one_ne_zero, not_false_iff]},
+
   rw h_2,
+
+  have g_3 : Oᵀ = -O,
+  {
+    ext,
+    rw transpose_apply,
+    repeat{rw pi.neg_apply},
+    rw ← complex.of_real_inj,
+    rw complex.of_real_neg,
+
+    have h_3 : ∀ (i_1 i_2 : n ), (O:matrix n n ℂ) i_1 i_2 = ((O i_1 i_2):ℂ),
+    intros i_1 i_2,
+    refl,
+
+    have o_ji : (O:matrix n n ℂ) j i = ((O j i):ℂ),
+    specialize h_3 j i,
+    rw h_3,
+
+    have o_ij : (O:matrix n n ℂ) i j = ((O i j):ℂ),
+    specialize h_3 i j,
+    rw h_3,
+
+    rw ← o_ji,
+    rw ← o_ij,
+    repeat {rw ← hO},
+
+    simp only [pi.smul_apply, pi.sub_apply, algebra.id.smul_eq_mul],
+    repeat {rw mul_sub},
+    rw neg_sub,
+    nth_rewrite 0 ← herm,
+    nth_rewrite 3 ← herm,
+    repeat {rw matrix_conj_conj},
+    repeat {rw transpose_apply}, 
+  },
+
   split,
   rw is_skew_symmetric,
-  rw smul_sub,
-  simp only [transpose_sub, transpose_smul, neg_sub],
-  rw is_hermitian at herm,
-  rw ← matrix_trans_conj,
-  rw herm,
-  nth_rewrite 1 ← herm,
-  rw matrix_trans_conj,
-  rw transpose_transpose,
-
-  rw smul_sub,
-  rw smul_sub,
-  rw ← smul_assoc,
-  rw smul_eq_mul,
-  rw ← mul_div_assoc,
-  rw complex.I_mul_I,
+  rw g_3,
+  rw ← hO,
+  rw ← hN,
+  rw smul_add,
   rw ← smul_assoc,
   rw smul_eq_mul,
   rw ← mul_div_assoc,
   rw complex.I_mul_I,
   rw neg_div,
+  rw smul_sub,
+  simp only [one_div, neg_smul, neg_sub_neg],
   rw add_sub,
-  rw neg_smul,
-  rw neg_smul,
-  rw sub_neg_eq_add,
-  
-  have mul_2 : ∀ (X Y : matrix n n ℂ) , X = Y ↔ (2 : ℂ) • X = (2 : ℂ) • Y,
-  {
-    intros X Y,
-    split,
-    intro xey,
-    rw xey,
-    intro xey_2,
-    funext,
-    repeat{rw two_smul at xey_2},
-    
-    have mul_2_scalar : (X + X) x x_1 = (Y+Y) x x_1,
-    {rw xey_2},
-
-    simp only [dmatrix.add_apply] at mul_2_scalar,
-    repeat {rw ← two_mul at mul_2_scalar},
-    rw mul_eq_mul_left_iff at mul_2_scalar,
-    simp only [bit0_eq_zero, one_ne_zero, or_false] at mul_2_scalar,
-    exact mul_2_scalar,
-  },
-
-  have mul_3 := mul_2,
-
-  specialize mul_2 M,
-  specialize mul_2 (↑(((1:ℝ) / 2) • N) + -(((1:ℂ) / 2) • M.matrix_conj) + ((1:ℂ) / 2) • M),
-  
+  rw add_assoc,
+  rw add_sub_cancel',
   rw mul_2,
-  repeat {rw smul_add},
-  rw ← smul_assoc,
-  simp only [neg_nsmul, nsmul_eq_mul, nat.cast_bit0, nat.cast_one, mul_inv_cancel_of_invertible, one_smul],
-  rw two_smul,
-  rw smul_eq_mul,
-  rw mul_div_cancel',
-  rw one_smul,
-  rw add_left_inj,
-  rw smul_neg,
-  rw ← smul_assoc,
-  rw smul_eq_mul,
-  rw mul_div_cancel',
-  rw one_smul,
-  rw ← sub_eq_iff_eq_add,
-  rw sub_neg_eq_add,
-  rw add_comm,
-  rw hN,
-
-  have n_smul : (N:(matrix n n ℂ)) = (2:ℂ) • ( ((1:ℂ)/2) • (N:(matrix n n ℂ))),
-  {simp only [one_div, smul_inv_smul₀, ne.def, bit0_eq_zero, one_ne_zero, not_false_iff]},
-  
-  rw n_smul,
-  repeat {rw two_smul},
-  simp only [one_div],
-
-  specialize mul_3 ((2:ℂ)⁻¹ • (N:matrix n n ℂ)),
-  specialize mul_3 ↑((2:ℝ)⁻¹ • N),
-  
-  repeat {rw two_smul at mul_3},
-
-  rw ← mul_3,
-  funext i j,
-  rw pi.smul_apply,
-  rw pi.smul_apply,
-
-
-  change (2 : ℂ)⁻¹ • ({re := N i j, im := 0} : ℂ) = {re := (2 : ℝ)⁻¹ • N i j, im := 0},
-  rw smul_eq_mul,
-  ext,
-  rw complex.mul_re,
-  simp only [complex.bit0_re, complex.one_re, mul_zero, sub_zero, algebra.id.smul_eq_mul, mul_eq_mul_right_iff],
-  left,
-
-  have two_inv_real : (2:ℂ)⁻¹.re = (2:ℝ)⁻¹,
-  {
-    simp only [complex.inv_re, complex.bit0_re, complex.one_re],
-    rw eq_comm,
-    apply eq_div_of_mul_eq,
-    simp only [ne.def, monoid_with_zero_hom.map_eq_zero, bit0_eq_zero, one_ne_zero, not_false_iff],
-    rw complex.norm_sq,
-    dsimp,
-    simp only [complex.bit0_im, complex.one_im, bit0_zero, mul_zero, add_zero, inv_mul_cancel_left₀, ne.def, bit0_eq_zero,
-    one_ne_zero, not_false_iff],
-  },
-
-  rw two_inv_real,
-  rw smul_eq_mul,
-  simp only [complex.mul_im, mul_zero, complex.inv_im, complex.bit0_im, complex.one_im, bit0_zero, neg_zero', zero_div, zero_mul,
-  add_zero],
-
-  exact complex_two_nez,
-  exact complex_two_nez,
+  simp only [smul_add, smul_inv_smul₀, ne.def, bit0_eq_zero, one_ne_zero, not_false_iff],
+  rw ← one_add_one_eq_two,
+  rw add_smul,
+  repeat {rw one_smul},
 end
 
 -- A Hermitian real matrix is symmetric
@@ -1599,6 +1647,172 @@ end definite
 
 end hermitian
 
+-- Any two eigenvectors corresponding to different eigenvalues are linearly independent
+lemma eigenvectors_linearly_independent (M : matrix n n ℂ) (u v : n → ℂ) (e r : ℂ)
+(ep_1 : has_eigenpair M e u) (ep_2 : has_eigenpair M r v) (neq : e ≠ r) :
+∀ (a b : ℂ), a • u + b • v = 0 → a = 0 ∧ b = 0 :=
+begin
+  intros a b lcz,
+  rw has_eigenpair at ep_1 ep_2,
+  cases ep_1 with unz ep_1,
+  cases ep_2 with vnz ep_2,
+  
+  rw ne at neq vnz unz,
+
+  have mlcz := congr_arg M.mul_vec lcz,
+
+  rw mul_vec_add at mlcz,
+  repeat {rw mul_vec_smul at mlcz},
+  rw ep_1 at mlcz,
+  rw ep_2 at mlcz,
+  rw mul_vec_zero at mlcz,
+
+  have elcz := congr_arg (λ x, e • x) lcz,
+  
+  dsimp at elcz,
+  rw smul_add at elcz,
+  rw smul_zero at elcz,
+  rw smul_comm at elcz,
+  rw ← elcz at mlcz,
+  rw add_right_inj at mlcz,
+  rw smul_comm at mlcz,
+
+  have key : (r - e) • b • v = 0,
+  {
+    rw sub_smul,
+    rw mlcz,
+    rw sub_self,
+  },
+
+  rw smul_eq_zero at key,
+  cases key with emrz key,
+  exfalso,
+  apply neq,
+  rw sub_eq_zero at emrz,
+  rw eq_comm,
+  exact emrz,
+  rw smul_eq_zero at key,
+  rw or_comm at key,
+  cases key with vz bz,
+  exfalso,
+  apply vnz,
+  exact vz,
+  split,
+  swap,
+  exact bz,
+  rw bz at lcz,
+  simp only [zero_smul, add_zero, smul_eq_zero] at lcz,
+  cases lcz with az uz,
+  exact az,
+  exfalso,
+  apply unz,
+  exact uz,
+end   
+
+-- Any linear combination (with non-zero coefficients) of two eigenvectors corresponding to different eigenvalues is not an eigenvector
+theorem independent_eigenvectors_linear_combination_not_eigenvector (M : matrix n n ℂ) (u v : n → ℂ) (e r : ℂ) (neq : e ≠ r)
+(ep_1 : has_eigenpair M e u) (ep_2 : has_eigenpair M r v) : ∀ (a b : ℂ), a ≠ 0 → b ≠ 0 → ¬(has_eigenvector M (a•u+b•v)) :=
+begin
+  have epeu := ep_1,
+  have eprv := ep_2,
+  
+  intros a b anz bnz,
+  rw ne at anz bnz neq,
+  by_contra ev,
+  rw has_eigenvector at ev,
+  cases ev with t ep,
+  rw has_eigenpair at ep,
+  cases ep with lc mul,
+  rw mul_vec_add at mul,
+  rw smul_add at mul,
+  repeat {rw mul_vec_smul at mul},
+
+  rw has_eigenpair at ep_1 ep_2,
+  cases ep_1 with unz mul_1,
+  cases ep_2 with vnz mul_2,
+  rw ne at unz vnz,
+  
+  rw [mul_1,mul_2] at mul,
+
+  have helper_lemma : a • (e - t) • u + b • (r - t) • v = 0,
+  {
+    repeat {rw sub_smul},
+    repeat {rw smul_sub},
+    rw sub_add_sub_comm,
+    rw sub_eq_zero,
+    rw smul_comm a t,
+    rw smul_comm b t,
+    exact mul,
+    apply_instance,
+    apply_instance
+  },
+
+  have lin_ind := eigenvectors_linearly_independent M u v e r epeu eprv neq,
+  
+  specialize lin_ind (a • (e - t)) (b • (r - t)),
+
+  have ent : ¬(e - t)=0,
+  {
+    by_contra eeqt,
+    rw eeqt at helper_lemma,
+    rw [zero_smul, smul_zero, zero_add] at helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma, 
+    apply bnz,
+    exact helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma,
+    rw sub_eq_zero at eeqt helper_lemma,
+    apply neq,
+    rw [helper_lemma,eeqt],
+    apply vnz,
+    exact helper_lemma
+  },
+
+  have rnt : ¬(r - t) = 0,
+  {
+    by_contra reqt,
+    rw reqt at helper_lemma,
+    rw [zero_smul, smul_zero, add_zero] at helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma,
+    apply anz,
+    exact helper_lemma,
+    rw smul_eq_zero at helper_lemma,
+    cases helper_lemma,
+    apply ent,
+    exact helper_lemma,
+    apply unz,
+    exact helper_lemma
+  },
+
+  have aemtnz : a • (e - t) ≠ 0,
+  {
+    rw smul_ne_zero,
+    split,
+    rwa ne,
+    rwa ne
+  },
+
+  have brmtnz : b • (r - t) ≠ 0,
+  {
+    rw smul_ne_zero,
+    split,
+    rwa ne,
+    rwa ne
+  },
+
+  repeat {rw smul_assoc at lin_ind},
+  have lin_ind_2 := lin_ind helper_lemma,
+  
+  repeat {rw smul_assoc at lin_ind_2},
+  
+  rw ne at aemtnz brmtnz,
+  apply aemtnz,
+  cases lin_ind_2 with aemtz brmtz,
+  exact aemtz,
+end
+
 -- If two matrices both have the eigenpair (e,v) then (e * e,v) is an eigenpair of their product
 lemma eigenvalue_prod (M : matrix n n ℂ) (N : matrix n n ℂ) 
 (v : n → ℂ) (e : ℂ)  (hme : has_eigenpair M e v) (hne : has_eigenpair N e v):
@@ -1811,144 +2025,6 @@ begin
 
   rw tr,
   rw det_transpose,
-end
-
--- Any two eigenvectors corresponding to different eigenvalues are linearly independent
-lemma eigenvectors_linearly_independent (M : matrix n n ℂ) (u v : n → ℂ) (e r : ℂ)
-(ep_1 : has_eigenpair M e u) (ep_2 : has_eigenpair M r v) (neq : e ≠ r) :
-∀ (a b : ℂ), a ≠ 0 → b ≠ 0 → a • u + b • v ≠ 0 :=
-begin
-  intros a b anz bnz,
-  rw ne,
-  by_contra lcz,
-  rw has_eigenpair at ep_1 ep_2,
-  cases ep_1 with unz mul_1,
-  cases ep_2 with vnz mul_2,
-  have m_mul := congr_arg M.mul_vec lcz,
-  rw mul_vec_zero at m_mul,
-  rw mul_vec_add at m_mul,
-  repeat {rw mul_vec_smul at m_mul},
-  rw [mul_1,mul_2] at m_mul,
-  rw add_eq_zero_iff_eq_neg at lcz,
-  rw smul_comm at m_mul,
-  rw lcz at m_mul,
-  rw smul_neg at m_mul,
-  rw add_comm at m_mul,
-  rw tactic.ring.add_neg_eq_sub at m_mul,
-  rw smul_comm at m_mul,
-  rw ← sub_smul at m_mul,
-  rw smul_eq_zero at m_mul,
-  cases m_mul with reqe dot_zero,
-  rw ne at neq,
-  apply neq,
-  rw sub_eq_zero at reqe,
-  rwa eq_comm,
-  rw smul_eq_zero at dot_zero,
-  cases dot_zero with bz vz,
-  rw ne at bnz, apply bnz, exact bz,
-  rw ne at vnz, apply vnz, exact vz,
-end   
-
--- Any linear combination of two eigenvectors corresponding to different eigenvalues is not an eigenvector
-theorem independent_eigenvectors_linear_combination_not_eigenvector (M : matrix n n ℂ) (u v : n → ℂ) (e r : ℂ) (neq : e ≠ r)
-(ep_1 : has_eigenpair M e u) (ep_2 : has_eigenpair M r v) : ∀ (a b : ℂ), a ≠ 0 → b ≠ 0 → ¬(has_eigenvector M (a•u+b•v)) :=
-begin
-  have epeu := ep_1,
-  have eprv := ep_2,
-  
-  intros a b anz bnz,
-  rw ne at anz bnz neq,
-  by_contra ev,
-  rw has_eigenvector at ev,
-  cases ev with t ep,
-  rw has_eigenpair at ep,
-  cases ep with lc mul,
-  rw mul_vec_add at mul,
-  rw smul_add at mul,
-  repeat {rw mul_vec_smul at mul},
-
-  rw has_eigenpair at ep_1 ep_2,
-  cases ep_1 with unz mul_1,
-  cases ep_2 with vnz mul_2,
-  rw ne at unz vnz,
-  
-  rw [mul_1,mul_2] at mul,
-
-  have helper_lemma : a • (e - t) • u + b • (r - t) • v = 0,
-  {
-    repeat {rw sub_smul},
-    repeat {rw smul_sub},
-    rw sub_add_sub_comm,
-    rw sub_eq_zero,
-    rw smul_comm a t,
-    rw smul_comm b t,
-    exact mul,
-    apply_instance,
-    apply_instance
-  },
-
-  have lin_ind := eigenvectors_linearly_independent M u v e r epeu eprv neq,
-  
-  specialize lin_ind (a • (e - t)) (b • (r - t)),
-
-  have ent : ¬(e - t)=0,
-  {
-    by_contra eeqt,
-    rw eeqt at helper_lemma,
-    rw [zero_smul, smul_zero, zero_add] at helper_lemma,
-    rw smul_eq_zero at helper_lemma,
-    cases helper_lemma, 
-    apply bnz,
-    exact helper_lemma,
-    rw smul_eq_zero at helper_lemma,
-    cases helper_lemma,
-    rw sub_eq_zero at eeqt helper_lemma,
-    apply neq,
-    rw [helper_lemma,eeqt],
-    apply vnz,
-    exact helper_lemma
-  },
-
-  have rnt : ¬(r - t) = 0,
-  {
-    by_contra reqt,
-    rw reqt at helper_lemma,
-    rw [zero_smul, smul_zero, add_zero] at helper_lemma,
-    rw smul_eq_zero at helper_lemma,
-    cases helper_lemma,
-    apply anz,
-    exact helper_lemma,
-    rw smul_eq_zero at helper_lemma,
-    cases helper_lemma,
-    apply ent,
-    exact helper_lemma,
-    apply unz,
-    exact helper_lemma
-  },
-
-  have aemtnz : a • (e - t) ≠ 0,
-  {
-    rw smul_ne_zero,
-    split,
-    rwa ne,
-    rwa ne
-  },
-
-  have brmtnz : b • (r - t) ≠ 0,
-  {
-    rw smul_ne_zero,
-    split,
-    rwa ne,
-    rwa ne
-  },
-
-  have lin_ind_2 := lin_ind aemtnz brmtnz,
-  
-  repeat {rw smul_assoc at lin_ind_2},
-  
-  rw ne at lin_ind_2,
-  apply lin_ind_2,
-  exact helper_lemma,
 end
 
 end matrix
